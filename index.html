@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<title>💰 Meniń Byudjetim</title>
+<link rel="icon" type="image/png" href="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRiwfl9-av0he8Pi4q4vCZP8TkqYXS0oAKF6QT4_u0PvQ&s">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+    body {
+        font-family: 'Segoe UI', Arial, sans-serif;
+        max-width: 540px;
+        margin: 20px auto;
+        background: linear-gradient(135deg, #f5f7fa, #e4e9f2);
+        padding: 10px;
+        color: #333;
+    }
+    h2 { text-align: center; color: #2196f3; margin-bottom: 10px; }
+    .box {
+        background: white;
+        padding: 20px;
+        margin: 15px 0;
+        border-radius: 16px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    input, button, select {
+        padding: 12px;
+        margin: 8px 0;
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid #ddd;
+        font-size: 16px;
+    }
+    button {
+        background: #2196f3;
+        color: white;
+        border: none;
+        font-weight: bold;
+        cursor: pointer;
+    }
+    button:hover { background: #1976d2; }
+    .income-btn { background: #4caf50 !important; }
+    .income-btn:hover { background: #388e3c !important; }
+    .delete { background: #f44336; width: auto; padding: 8px 12px; }
+    .start-box { border: 3px solid #4caf50; }
+    .hint { color: #d32f2f; font-weight: bold; }
+    .summary p { font-size: 18px; margin: 12px 0; }
+    .positive { color: #4caf50; }
+    .negative { color: #f44336; }
+    li {
+        padding: 12px;
+        margin: 8px 0;
+        border-radius: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+</style>
+</head>
+<body>
+<h2>💰 Meniń Byudjetim</h2>
+
+<!-- Boshlang‘ich pul -->
+<div class="box start-box" id="startBox" style="display: none;">
+    <h3>🗓 Jańa ay baslandı!</h3>
+    <p class="hint">Bul aydıń baslanǵısh pulın kirgiziń (tek bir márte):</p>
+    <input type="number" id="startMoney" placeholder="Jaziń">
+    <button onclick="saveStart()">Saqlaw</button>
+</div>
+
+<!-- Xarajat -->
+<div class="box">
+    <h3 style="margin:0 0 10px 0; color:#f44336;">🛒 Qárejet</h3>
+    <input type="number" id="expenseAmount" placeholder="Muǵdarı (som)">
+    <input type="text" id="expenseName" placeholder="Qárejet atı">
+    <button onclick="addExpense()">+ Qárejet qosıw</button>
+</div>
+
+<!-- Daromad -->
+<div class="box">
+    <h3 style="margin:0 0 10px 0; color:#4caf50;">💵 Túsken pul (Dáramat)</h3>
+    <input type="number" id="incomeAmount" placeholder="Muǵdarı (som)">
+    <input type="text" id="incomeName" placeholder="Daramat atı">
+    <button class="income-btn" onclick="addIncome()">+ Dáramat qosıw</button>
+</div>
+
+<div class="box">
+    <select id="filter" onchange="render()">
+        <option value="all">Barlıǵı</option>
+        <option value="day">Búgingi</option>
+        <option value="month">Usı ay</option>
+    </select>
+</div>
+
+<div class="box summary">
+    <p>Jámi baslanǵısh: <b id="startTotal"></b> som</p>
+    <p>Jámi dáramat: <b id="totalIncome" class="positive"></b> som</p>
+    <p>Jumsalǵan: <b id="spent" class="negative"></b> som</p>
+    <p><strong>Qalǵan pul: <b id="remain"></b> som</strong></p>
+</div>
+
+<div class="box">
+    <canvas id="chart" height="230"></canvas>
+</div>
+
+<div class="box">
+    <button onclick="forceNewStart()" style="background:#ff9800; padding:10px 15px;">
+        🗓 Jańa ay ushın baslanǵısh pul
+    </button>
+    <ul id="list" style="list-style:none; padding:0; margin-top:15px;"></ul>
+</div>
+
+<script>
+let startMoney = Number(localStorage.getItem("startMoney")) || 0;
+let incomes = JSON.parse(localStorage.getItem("incomes")) || [];
+let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+let currentMonthKey = localStorage.getItem("currentMonth") || "";
+
+function getMonthKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${now.getMonth() + 1}`;
+}
+
+function checkNewMonth() {
+    const newKey = getMonthKey();
+    if (newKey !== currentMonthKey) {
+        currentMonthKey = newKey;
+        startMoney = 0;
+        localStorage.setItem("currentMonth", currentMonthKey);
+        localStorage.setItem("startMoney", 0);
+        document.getElementById("startBox").style.display = "block";
+    } else {
+        document.getElementById("startBox").style.display = "none";
+    }
+}
+
+function saveStart() {
+    const val = Number(document.getElementById("startMoney").value);
+    if (!val || val <= 0) return alert("Musbat son kiriting!");
+    startMoney = val;
+    localStorage.setItem("startMoney", startMoney);
+    document.getElementById("startBox").style.display = "none";
+    render();
+}
+
+function forceNewStart() {
+    if (confirm("Jańa ay ushın baslanǵısh pul kirgizbekshi me?")) {
+        document.getElementById("startBox").style.display = "block";
+    }
+}
+
+function addIncome() {
+    const name = document.getElementById("incomeName").value.trim();
+    const amount = Number(document.getElementById("incomeAmount").value);
+    if (!name || !amount || amount <= 0) return alert("Dáramat maǵlıwmatın durıs kirgiziń!");
+
+    incomes.push({ name, amount, date: new Date().toISOString(), type: "income" });
+    localStorage.setItem("incomes", JSON.stringify(incomes));
+    render();
+    document.getElementById("incomeName").value = "";
+    document.getElementById("incomeAmount").value = "";
+}
+
+function addExpense() {
+    const name = document.getElementById("expenseName").value.trim();
+    const amount = Number(document.getElementById("expenseAmount").value);
+    if (!name || !amount || amount <= 0) return alert("Qárejet maǵlıwmatın durıs kirgiziń!");
+
+    expenses.push({ name, amount, date: new Date().toISOString(), type: "expense" });
+    localStorage.setItem("expenses", JSON.stringify(expenses));
+    render();
+    document.getElementById("expenseName").value = "";
+    document.getElementById("expenseAmount").value = "";
+}
+
+function remove(index, isIncome) {
+    if (confirm("Bul jazıwdı óshiriwdi qáleysiz be?")) {
+        if (isIncome) incomes.splice(index, 1), localStorage.setItem("incomes", JSON.stringify(incomes));
+        else expenses.splice(index, 1), localStorage.setItem("expenses", JSON.stringify(expenses));
+        render();
+    }
+}
+
+function filterData(data) {
+    const type = document.getElementById("filter").value;
+    const now = new Date();
+    return data.filter(item => {
+        const d = new Date(item.date);
+        if (type === "day") return d.toDateString() === now.toDateString();
+        if (type === "month") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        return true;
+    });
+}
+
+let chartInstance;
+
+function render() {
+    checkNewMonth();
+
+    let filteredIncomes = filterData(incomes);
+    let filteredExpenses = filterData(expenses);
+
+    // Barcha yozuvlarni birlashtirish
+    let allTransactions = [
+        ...filteredIncomes.map(item => ({...item, isIncome: true})),
+        ...filteredExpenses.map(item => ({...item, isIncome: false}))
+    ];
+
+    // Vaqt bo‘yicha saralash (eng yangisi yuqorida)
+    allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    let totalIncome = filteredIncomes.reduce((sum, i) => sum + i.amount, 0);
+    let totalSpent = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+    let balance = startMoney + totalIncome - totalSpent;
+
+    // Summary
+    document.getElementById("startTotal").textContent = startMoney.toLocaleString();
+    document.getElementById("totalIncome").textContent = totalIncome.toLocaleString();
+    document.getElementById("spent").textContent = totalSpent.toLocaleString();
+    const remainEl = document.getElementById("remain");
+    remainEl.textContent = balance.toLocaleString();
+    remainEl.style.color = balance >= 0 ? "#4caf50" : "#f44336";
+
+    // Ro‘yxat (vaqt bo‘yicha)
+    const list = document.getElementById("list");
+    list.innerHTML = "";
+
+    allTransactions.forEach((t, globalIndex) => {
+        const date = new Date(t.date);
+        const dateStr = date.toLocaleDateString('uz-UZ') + " " + 
+                        date.toLocaleTimeString('uz-UZ', {hour:'2-digit', minute:'2-digit'});
+
+        const li = document.createElement("li");
+        const isIncome = t.isIncome;
+
+        li.style.background = isIncome ? "#e8f5e9" : "#ffebee";
+        li.innerHTML = `
+            <span>
+                ${isIncome ? '💵' : '🛒'} 
+                <strong>${dateStr}</strong><br>
+                ${t.name} — ${isIncome ? '+' : ''}${t.amount.toLocaleString()} so‘m
+            </span>
+            <button class="delete" onclick="remove(${globalIndex}, ${isIncome})">❌</button>
+        `;
+        list.appendChild(li);
+    });
+
+    // Pie Chart (xarajatlar)
+    const labels = filteredExpenses.map(e => e.name);
+    const dataAmounts = filteredExpenses.map(e => e.amount);
+    const colors = ['#FF6384','#36A2EB','#FFCE56','#4BC0C0','#9966FF','#FF9F40'];
+
+    if (chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(document.getElementById("chart"), {
+        type: "pie",
+        data: {
+            labels: labels.length ? labels : ["Qárejet joq"],
+            datasets: [{ data: dataAmounts.length ? dataAmounts : [1], backgroundColor: colors }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Qárejetler bólistiriliwi' }}
+        }
+    });
+}
+
+// Dastlabki yuklash
+checkNewMonth();
+render();
+</script>
+</body>
+</html>
